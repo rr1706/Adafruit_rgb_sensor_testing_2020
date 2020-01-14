@@ -26,14 +26,22 @@
 #include <Adafruit_NeoPixel.h>
 
 #define NEO_PIN        6 // On Trinket or Gemma, suggest changing this to 1
-#define NUMPIXELS     16 // Popular NeoPixel ring size
+#define NUMPIXELS     12 // Popular NeoPixel ring size
+
+#define PIN_OUT1          8
+#define PIN_OUT2          9
+#define PIN_VALID        10
 
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel pixels(NUMPIXELS, NEO_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel boardPixel(1, 40, NEO_GRB + NEO_KHZ800);
 
 void setup() {
   Serial.begin(115200);
   pinMode(INT_PIN, INPUT_PULLUP);
+  pinMode(PIN_OUT1, OUTPUT);
+  pinMode(PIN_OUT2, OUTPUT);
+  pinMode(PIN_VALID, OUTPUT);
 
   if(!apds.begin()){
     Serial.println("failed to initialize device! Please check your wiring.");
@@ -65,6 +73,16 @@ void setup() {
   }
   pixels.show();   // Send the updated pixel colors to the hardware.
 
+  boardPixel.begin();
+  boardPixel.setBrightness(127);
+  boardPixel.clear();
+
+}
+
+void outputValues(int color, int valid) {
+  digitalWrite(PIN_OUT1, color & 1 == 1); // Output bit 1
+  digitalWrite(PIN_OUT2, color & 2 == 2); // Output bit 2
+  digitalWrite(PIN_VALID, valid);
 }
 
 void loop() {
@@ -78,52 +96,67 @@ void loop() {
   } else {
     // If we're not close to anything, then just pause for a little bit 
     // and try again from the start.
-    delay(50);
+    delay(5);
+    //outputValues(0, 0);
+    //boardPixel.setPixelColor(0, pixels.Color(0, 0, 0));
+    //boardPixel.show();
     return;
   }
   
   //wait for color data to be ready
   while(!apds.colorDataReady()){
-    delay(5);
+    delay(1);
   }
 
   //get the data and print the different channels
   apds.getColorData(&r, &g, &b, &c);
-
-  // print raw color values;
-  Serial.print("red: ");
-  Serial.print(r);
-  
-  Serial.print(" green: ");
-  Serial.print(g);
-  
-  Serial.print(" blue: ");
-  Serial.print(b);
-  
-  Serial.println();
 
   // Normalize the values:
   int normRed   = (100 * r) / (r + g + b);
   int normGreen = (100 * g) / (r + g + b);
   int normBlue  = (100 * b) / (r + g + b);
 
+  // print raw color values;
+  Serial.print("red: ");
+  Serial.print(normRed);
+  
+  Serial.print(" green: ");
+  Serial.print(normGreen);
+  
+  Serial.print(" blue: ");
+  Serial.print(normBlue);
+  
+  Serial.println();
+
   // This is using raw values, but we should switch to normalized values:
-  if (g - r > 20 && g - b > 5) {
+  if (normGreen - normRed > 20 && normGreen - normBlue > 5) {
     Serial.println("GREEN");
-  }
-
-  if (r - g > 20 && abs(g - b) < 10) {
+    outputValues(1, 1);
+    boardPixel.setPixelColor(0, pixels.Color(0, 100, 0));
+    boardPixel.show();
+  } else if (normRed - normGreen > 20 && abs(normGreen - normBlue) < 10) {
     Serial.println("RED");
-  }
-
-  if (r - g < 5 && g - b > 20) {
+    outputValues(2, 1);
+    boardPixel.setPixelColor(0, pixels.Color(100, 0, 0));
+    boardPixel.show();
+  } else if (abs(normRed - normGreen) < 5 && normGreen - normBlue > 10) {
     Serial.println("YELLOW");
+    outputValues(3, 1);
+    boardPixel.setPixelColor(0, pixels.Color(50, 50, 0));
+    boardPixel.show();
+  } else if (normGreen - normRed > 10 && (normBlue - normGreen) > 10) {
+    Serial.println("BLUE");
+    outputValues(0, 1);
+    boardPixel.setPixelColor(0, pixels.Color(0, 0, 100));
+    boardPixel.show();
+  } else {
+    outputValues(0, 0);
+    boardPixel.setPixelColor(0, pixels.Color(0, 0, 0));
+    boardPixel.show();
   }
 
-  if (g - r > 10 && abs(g - b) < 5) {
-    Serial.println("BLUE");
-  }
+  //pixels.show();
 
   
-  delay(100);
+  delay(5);
 }
