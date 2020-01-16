@@ -23,7 +23,7 @@
 #include "Adafruit_APDS9960.h"
 
 // Add neopixel support so we can illuminate the target.
-#include <Adafruit_NeoPixel.h>
+#include "Adafruit_NeoPixel.h"
 
 #define NEO_PIN        6 // On Trinket or Gemma, suggest changing this to 1
 #define NUMPIXELS     12 // Popular NeoPixel ring size
@@ -79,9 +79,9 @@ void setup() {
 
 }
 
-void outputValues(int color, int valid) {
-  digitalWrite(PIN_OUT1, color & 1 == 1); // Output bit 1
-  digitalWrite(PIN_OUT2, color & 2 == 2); // Output bit 2
+void outputValues(int bit1, int bit2, int valid) {
+  digitalWrite(PIN_OUT1, bit1); // Output bit 1
+  digitalWrite(PIN_OUT2, bit2); // Output bit 2
   digitalWrite(PIN_VALID, valid);
 }
 
@@ -131,26 +131,26 @@ void loop() {
   // This is using raw values, but we should switch to normalized values:
   if (normGreen - normRed > 20 && normGreen - normBlue > 5) {
     Serial.println("GREEN");
-    outputValues(1, 1);
+    outputValues(0, 1, 1);
     boardPixel.setPixelColor(0, pixels.Color(0, 100, 0));
     boardPixel.show();
   } else if (normRed - normGreen > 20 && abs(normGreen - normBlue) < 10) {
     Serial.println("RED");
-    outputValues(2, 1);
+    outputValues(0, 0, 1);
     boardPixel.setPixelColor(0, pixels.Color(100, 0, 0));
     boardPixel.show();
   } else if (abs(normRed - normGreen) < 5 && normGreen - normBlue > 10) {
     Serial.println("YELLOW");
-    outputValues(3, 1);
+    outputValues(1, 1, 1);
     boardPixel.setPixelColor(0, pixels.Color(50, 50, 0));
     boardPixel.show();
   } else if (normGreen - normRed > 10 && (normBlue - normGreen) > 10) {
     Serial.println("BLUE");
-    outputValues(0, 1);
+    outputValues(1, 0, 1);
     boardPixel.setPixelColor(0, pixels.Color(0, 0, 100));
     boardPixel.show();
   } else {
-    outputValues(0, 0);
+    outputValues(0, 0, 0);
     boardPixel.setPixelColor(0, pixels.Color(0, 0, 0));
     boardPixel.show();
   }
