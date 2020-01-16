@@ -1,6 +1,7 @@
 /***************************************************************************
-  This is a library for the APDS9960 digital proximity, ambient light, RGB, and gesture sensor
-
+  This is sample code to start using the APDS9660 sensor from Adafruit with 
+  an FRC robot.
+  
   This sketch puts the sensor in color mode and reads the RGB and clear values.
 
   Designed specifically to work with the Adafruit APDS9960 breakout
@@ -8,25 +9,23 @@
 
   These sensors use I2C to communicate. The device's I2C address is 0x39
 
-  Adafruit invests time and resources providing this open source code,
-  please support Adafruit andopen-source hardware by purchasing products
-  from Adafruit!
+  @NOTE: To use this code, install the Adafruit_APDS9960 and Adafruit_NeoPixel
+         libraries using the Arduino IDE library manager.
 
-  Written by Dean Miller for Adafruit Industries.
-  BSD license, all text above must be included in any redistribution
  ***************************************************************************/
 
 //the pin that the interrupt is attached to
 #define INT_PIN 3
 
 
-#include "Adafruit_APDS9960.h"
+#include <Adafruit_APDS9960.h>
 
 // Add neopixel support so we can illuminate the target.
-#include "Adafruit_NeoPixel.h"
+#include <Adafruit_NeoPixel.h>
 
 #define NEO_PIN        6 // On Trinket or Gemma, suggest changing this to 1
 #define NUMPIXELS     12 // Popular NeoPixel ring size
+#define ONBOARD_NEO_PIN  40
 
 #define PIN_OUT1          8
 #define PIN_OUT2          9
@@ -34,7 +33,7 @@
 
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel pixels(NUMPIXELS, NEO_PIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel boardPixel(1, 40, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
   Serial.begin(115200);
