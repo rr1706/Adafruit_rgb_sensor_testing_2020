@@ -17,12 +17,12 @@
 //the pin that the interrupt is attached to
 #define INT_PIN 13
 
-
 #include <Adafruit_APDS9960.h>
 
 // Add neopixel support so we can illuminate the target.
 #include <Adafruit_NeoPixel.h>
 #include "ColorSample.h"
+#include "Storage.h"
 
 #define NEO_PIN        6 // On Trinket or Gemma, suggest changing this to 1
 #define NUMPIXELS     16 // Popular NeoPixel ring size
@@ -44,6 +44,8 @@ Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
 long count = 0;
 long timerStart = 0;
 long readsAverage = 0;
+long interruptTimeout = 0;
+long goodCount = 0;
 
 ColorSample targetColors[] = {
   {"Red", 63, 12, 24, 0, 0, 100, 0, 0},
@@ -51,9 +53,48 @@ ColorSample targetColors[] = {
   {"Blue", 8, 32, 58, 1, 0, 0, 0, 100},
   {"Yellow", 36, 38, 25, 1, 1, 50, 50, 0}
   };
+
+void outputValues(int bit1, int bit2, int valid) {
+  digitalWrite(PIN_OUT1, bit1); // Output bit 1
+  digitalWrite(PIN_OUT2, bit2); // Output bit 2
+  digitalWrite(PIN_VALID, valid);
+}
+
+void checkForCalibration(int r, int g, int b) {
+  boolean updated = false;
+  if (!digitalRead(RED_CALIBRATE_PIN)) {
+    Serial.println("Calibrating Red.");
+    targetColors[0].red = r;
+    targetColors[0].green = g;
+    targetColors[0].blue = b;
+    updated = true;
+  } else if (!digitalRead(GREEN_CALIBRATE_PIN)) {
+    Serial.println("Calibrating Green.");
+    targetColors[1].red = r;
+    targetColors[1].green = g;
+    targetColors[1].blue = b;
+    updated = true;
+  } else if (!digitalRead(BLUE_CALIBRATE_PIN)) {
+    Serial.println("Calibrating Blue.");
+    targetColors[2].red = r;
+    targetColors[2].green = g;
+    targetColors[2].blue = b;
+    updated = true;
+  } else if (!digitalRead(YELLOW_CALIBRATE_PIN)) {
+    Serial.println("Calibrating Yellow.");
+    targetColors[3].red = r;
+    targetColors[3].green = g;
+    targetColors[3].blue = b;
+    updated = true;
+  }
+  if (updated) {
+    saveCalibratedColors(targetColors);
+  }
+}
+
   
 void setup() {
-//  while (!Serial); // Wait for Serial port to initialize.
+  while (!Serial); // Wait for Serial port to initialize.
   Serial.begin(115200);
   pinMode(INT_PIN, INPUT_PULLUP);
   pinMode(PIN_OUT1, OUTPUT);
@@ -105,38 +146,12 @@ void setup() {
   boardPixel.setBrightness(50);
   boardPixel.clear();
 
+  initStorage();
+  readCalibratedValues(targetColors);
+
   Serial.println("Setup complete.");
 }
 
-void outputValues(int bit1, int bit2, int valid) {
-  digitalWrite(PIN_OUT1, bit1); // Output bit 1
-  digitalWrite(PIN_OUT2, bit2); // Output bit 2
-  digitalWrite(PIN_VALID, valid);
-}
-
-void checkForCalibration(int r, int g, int b) {
-  if (!digitalRead(RED_CALIBRATE_PIN)) {
-    Serial.println("Calibrating Red.");
-    targetColors[0].red = r;
-    targetColors[0].green = g;
-    targetColors[0].blue = b;
-  } else if (!digitalRead(GREEN_CALIBRATE_PIN)) {
-    Serial.println("Calibrating Green.");
-    targetColors[1].red = r;
-    targetColors[1].green = g;
-    targetColors[1].blue = b;
-  } else if (!digitalRead(BLUE_CALIBRATE_PIN)) {
-    Serial.println("Calibrating Blue.");
-    targetColors[2].red = r;
-    targetColors[2].green = g;
-    targetColors[2].blue = b;
-  } else if (!digitalRead(YELLOW_CALIBRATE_PIN)) {
-    Serial.println("Calibrating Yellow.");
-    targetColors[3].red = r;
-    targetColors[3].green = g;
-    targetColors[3].blue = b;
-  }
-}
 
 void loop() {
   //create some variables to store the color data in
@@ -146,10 +161,16 @@ void loop() {
   if(!digitalRead(INT_PIN)){
     //clear the interrupt
     apds.clearInterrupt();
+    interruptTimeout = 0;
   } else {
     // If we're not close to anything, then just pause for a little bit 
     // and try again from the start.
     delay(1);
+    // If we've been far away for several cycles, then make sure the 
+    // RoboRio knows.
+    if (++interruptTimeout > 100) {
+      outputValues(0, 0, 0);
+    }
     return;
   }
   
@@ -168,6 +189,18 @@ void loop() {
   //get the data and print the different channels
   apds.getColorData(&r, &g, &b, &c);
   count++;
+
+  // Check to make sure we're seeing enough light coming in.
+  if (c < 20) {
+    // Too dark, tell the rio and bail out.
+    outputValues(0, 0, 0);
+    Serial.print("Too dark.\t");
+    Serial.print(c);
+    Serial.print(" ");
+    Serial.println(r + g + b);
+    delay(1);
+    return;
+  }
   
   // Normalize the values:
   int normRed   = (100 * r) / (r + g + b);
@@ -189,12 +222,21 @@ void loop() {
 
   int distance = 0;
   ColorSample *target = findClosestColor(targetColors, normRed, normGreen, normBlue, distance);
-  //if (distance < 15) {
-    Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
-    outputValues(target->out1, target->out2, 1);
+  if (distance < 5) {
+    if (++goodCount > 3) {
+      Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
+      outputValues(target->out1, target->out2, 1);
+    } else {
+      outputValues(0, 0, 0);
+    }
     boardPixel.setPixelColor(0, pixels.Color(target->dispRed, target->dispGreen, target->dispBlue));
     boardPixel.show();
-  //}
+  } else {
+    goodCount = 0;
+    outputValues(0, 0, 0);
+    boardPixel.setPixelColor(0, 0, 0, 0);
+    boardPixel.show();
+  }
   Serial.println();
 
   checkForCalibration(normRed, normGreen, normBlue);
