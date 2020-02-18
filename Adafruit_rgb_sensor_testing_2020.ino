@@ -17,16 +17,18 @@
 //the pin that the interrupt is attached to
 #define INT_PIN 13
 
-#include <Adafruit_APDS9960.h>
-
 // Add neopixel support so we can illuminate the target.
+#include <Wire.h>
 #include <Adafruit_NeoPixel.h>
+#include <Adafruit_APDS9960.h>
 #include "ColorSample.h"
 #include "Storage.h"
+#include <SFE_MicroOLED.h>  // Include the SFE_MicroOLED library
 
-#define NEO_PIN        6 // On Trinket or Gemma, suggest changing this to 1
-#define NUMPIXELS     16 // Popular NeoPixel ring size
-#define ONBOARD_NEO_PIN  40
+#define PIN_RESET 9  
+#define DC_JUMPER 1 
+
+#define ONBOARD_NEO_PIN  6
 
 #define PIN_OUT1          8
 #define PIN_OUT2          9
@@ -38,8 +40,8 @@
 #define YELLOW_CALIBRATE_PIN 5
 
 Adafruit_APDS9960 apds;
-Adafruit_NeoPixel pixels(NUMPIXELS, NEO_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
+MicroOLED oled(PIN_RESET, DC_JUMPER);    // I2C declaration
 
 long count = 0;
 long timerStart = 0;
@@ -89,9 +91,22 @@ void checkForCalibration(int r, int g, int b) {
   }
   if (updated) {
     saveCalibratedColors(targetColors);
+    displayTargets();
   }
 }
 
+void displayTargets() {
+  char buffer[50];
+  oled.clear(PAGE);     // Clear the screen
+  oled.setFontType(0);  // Set font to type 0
+  oled.setCursor(0, 0); // Set cursor to top-left
+  oled.println("  R  G  B");
+  for (int i = 0; i < 4; i++) {
+    sprintf(buffer, "%c %02i %02i %02i", targetColors[i].name[0], targetColors[i].red, targetColors[i].green, targetColors[i].blue);
+    oled.print(buffer);
+  }
+  oled.display();       // Refresh the display
+}
   
 void setup() {
   while (!Serial); // Wait for Serial port to initialize.
@@ -128,55 +143,42 @@ void setup() {
   //enable the proximity interrupt
   apds.enableProximityInterrupt();
 
-  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
-  pixels.setBrightness(255);
-
-  pixels.clear(); // Set all pixel colors to 'off'
-  for(int i=0; i<NUMPIXELS; i++) { // For each pixel...
-
-    // Here we're using a moderately color that compensates for the slightly 
-    // blueish tint if we set them to all the same color:
-    pixels.setPixelColor(i, 70, 60, 50);
-
-  }
-  pixels.show();   // Send the updated pixel colors to the hardware.
-
-  Serial.println("NeoPixel Ring Started");
   boardPixel.begin();
   boardPixel.setBrightness(50);
   boardPixel.clear();
 
+  oled.begin();    // Initialize the OLED
+  oled.clear(ALL); // Clear the display's internal memory
+  oled.display();  // Display what's in the buffer (splashscreen)
+  delay(1000);     // Delay 1000 ms
+  oled.clear(PAGE); // Clear the buffer.
+
+
   initStorage();
   readCalibratedValues(targetColors);
+  displayTargets();
+  
+  setRingColor(70, 60, 50);
 
   Serial.println("Setup complete.");
+}
+
+void setRingColor(byte r, byte g, byte b) {
+  Wire.beginTransmission(44); // transmit to device #44
+  Wire.write(r);              // sends one byte
+  Wire.write(g);              // sends one byte
+  Wire.write(b);              // sends one byte
+  Wire.endTransmission();     // stop transmitting
 }
 
 
 void loop() {
   //create some variables to store the color data in
   uint16_t r, g, b, c;
-
-  // check for when the interrupt pin goes low
-  if(!digitalRead(INT_PIN)){
-    //clear the interrupt
-    apds.clearInterrupt();
-    interruptTimeout = 0;
-  } else {
-    // If we're not close to anything, then just pause for a little bit 
-    // and try again from the start.
-    delay(1);
-    // If we've been far away for several cycles, then make sure the 
-    // RoboRio knows.
-    if (++interruptTimeout > 100) {
-      outputValues(0, 0, 0);
-    }
-    return;
-  }
   
   //wait for color data to be ready
   while(!apds.colorDataReady()){
-    //delay(1);
+    delay(1);
   }
 
   long currentTime = millis();
@@ -229,7 +231,7 @@ void loop() {
     } else {
       outputValues(0, 0, 0);
     }
-    boardPixel.setPixelColor(0, pixels.Color(target->dispRed, target->dispGreen, target->dispBlue));
+    boardPixel.setPixelColor(0, boardPixel.Color(target->dispRed, target->dispGreen, target->dispBlue));
     boardPixel.show();
   } else {
     goodCount = 0;
