@@ -1,3 +1,4 @@
+
 /***************************************************************************
   This is sample code to start using the APDS9660 sensor from Adafruit with 
   an FRC robot.
@@ -19,6 +20,7 @@
 
 // Add neopixel support so we can illuminate the target.
 #include <Wire.h>
+#include <VL53L1X.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_APDS9960.h>
 #include "ColorSample.h"
@@ -42,12 +44,15 @@
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
 MicroOLED oled(PIN_RESET, DC_JUMPER);    // I2C declaration
+VL53L1X sensor;
 
 long count = 0;
 long timerStart = 0;
 long readsAverage = 0;
 long interruptTimeout = 0;
 long goodCount = 0;
+
+bool isOnRobot = true;
 
 ColorSample targetColors[] = {
   {"Red", 63, 12, 24, 0, 0, 100, 0, 0},
@@ -111,17 +116,19 @@ void displayTargets() {
 void setup() {
   while (!Serial); // Wait for Serial port to initialize.
   Serial.begin(115200);
+
+  isOnRobot = checkForOnRobot();
+
   pinMode(INT_PIN, INPUT_PULLUP);
   pinMode(PIN_OUT1, OUTPUT);
   pinMode(PIN_OUT2, OUTPUT);
   pinMode(PIN_VALID, OUTPUT);
-
   pinMode(RED_CALIBRATE_PIN, INPUT_PULLUP);
   pinMode(GREEN_CALIBRATE_PIN, INPUT_PULLUP);
   pinMode(BLUE_CALIBRATE_PIN, INPUT_PULLUP);
   pinMode(YELLOW_CALIBRATE_PIN, INPUT_PULLUP);
 
-  Wire.setClock(1000000);
+  Wire.setClock(400000);
 
   Serial.println("Starting...");
   if(!apds.begin()){
@@ -147,11 +154,11 @@ void setup() {
   boardPixel.setBrightness(50);
   boardPixel.clear();
 
-  oled.begin();    // Initialize the OLED
-  oled.clear(ALL); // Clear the display's internal memory
-  oled.display();  // Display what's in the buffer (splashscreen)
-  delay(1000);     // Delay 1000 ms
-  oled.clear(PAGE); // Clear the buffer.
+  oled.begin();      // Initialize the OLED
+  oled.clear(ALL);   // Clear the display's internal memory
+  oled.display();    // Display what's in the buffer (splashscreen)
+  delay(1000);       // Delay 1000 ms
+  oled.clear(PAGE);  // Clear the buffer.
 
 
   initStorage();
@@ -159,6 +166,15 @@ void setup() {
   displayTargets();
   
   setRingColor(70, 60, 50);
+
+  sensor.setTimeout(500);
+  if (!sensor.init()) {
+    Serial.println("Failed to detect and initialize sensor!");
+  }
+  sensor.setDistanceMode(VL53L1X::Long);
+  sensor.setMeasurementTimingBudget(33000);
+  sensor.startContinuous(33);
+
 
   Serial.println("Setup complete.");
 }
@@ -171,14 +187,33 @@ void setRingColor(byte r, byte g, byte b) {
   Wire.endTransmission();     // stop transmitting
 }
 
+void sendDistance(int sensorNum, int inches) {
+  Wire.beginTransmission(55);  // transmit to device #44
+  Wire.write((byte)sensorNum); // sends one byte
+  Wire.write((byte)inches);    // sends one byte
+  Wire.endTransmission();      // stop transmitting  
+}
+
+int lastDistInches = 0;
 
 void loop() {
   //create some variables to store the color data in
   uint16_t r, g, b, c;
+
+  if (sensor.dataReady()) {
+    int distMM = sensor.read(false);
+    int distInches = (int)(((double)distMM) / 25.4);
+
+    if (distInches != lastDistInches) {
+      lastDistInches = distInches;
+      sendDistance(0, lastDistInches);
+      Serial.print(distInches); Serial.println(" inches");
+    }
+  }
   
   //wait for color data to be ready
-  while(!apds.colorDataReady()){
-    delay(1);
+  if(!apds.colorDataReady()){
+    return;
   }
 
   long currentTime = millis();
@@ -244,4 +279,9 @@ void loop() {
   checkForCalibration(normRed, normGreen, normBlue);
   
   delay(1);
+}
+
+bool checkForOnRobot() {
+  Wire.beginTransmission(0X3D);  // Check for the screen
+  return 0 != Wire.endTransmission();
 }
