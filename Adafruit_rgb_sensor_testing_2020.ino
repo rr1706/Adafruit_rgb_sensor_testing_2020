@@ -40,11 +40,12 @@
 #define GREEN_CALIBRATE_PIN 3
 #define BLUE_CALIBRATE_PIN 4
 #define YELLOW_CALIBRATE_PIN 5
+#define NUM_LIDAR 4
 
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
 MicroOLED oled(PIN_RESET, DC_JUMPER);    // I2C declaration
-VL53L1X sensor;
+VL53L1X sensor[NUM_LIDAR];
 
 long count = 0;
 long timerStart = 0;
@@ -53,7 +54,6 @@ long interruptTimeout = 0;
 long goodCount = 0;
 
 bool isOnRobot = true;
-
 ColorSample targetColors[] = {
   {"Red", 63, 12, 24, 0, 0, 100, 0, 0},
   {"Green", 15, 44, 42, 0, 1, 0, 100, 0},
@@ -106,7 +106,7 @@ void displayTargets() {
   oled.setFontType(0);  // Set font to type 0
   oled.setCursor(0, 0); // Set cursor to top-left
   oled.println("  R  G  B");
-  for (int i = 0; i < 4; i++) {
+  for (byte i = 0; i < 4; i++) {
     sprintf(buffer, "%c %02i %02i %02i", targetColors[i].name[0], targetColors[i].red, targetColors[i].green, targetColors[i].blue);
     oled.print(buffer);
   }
@@ -116,6 +116,7 @@ void displayTargets() {
 void setup() {
   while (!Serial); // Wait for Serial port to initialize.
   Serial.begin(115200);
+  Wire.begin();
 
   isOnRobot = checkForOnRobot();
 
@@ -129,6 +130,7 @@ void setup() {
   pinMode(YELLOW_CALIBRATE_PIN, INPUT_PULLUP);
 
   Wire.setClock(400000);
+  //delay(1000);
 
   Serial.println("Starting...");
   if(!apds.begin()){
@@ -167,14 +169,21 @@ void setup() {
   
   setRingColor(70, 60, 50);
 
-  sensor.setTimeout(500);
-  if (!sensor.init()) {
-    Serial.println("Failed to detect and initialize sensor!");
+  setMuxPort(0);
+  for (byte i=0; i< NUM_LIDAR; i++){
+    if (enableMuxPort(i)) {
+      sensor[i].setTimeout(500);
+      if (!sensor[i].init()) {
+        Serial.print("Failed to detect and initialize sensor!");Serial.println(i);
+      }
+      sensor[i].setDistanceMode(VL53L1X::Long);
+      sensor[i].setMeasurementTimingBudget(33000);
+      sensor[i].startContinuous(33);
+      disableMuxPort(i);
+    } else {
+      Serial.print("failed to set mux port");
+    }
   }
-  sensor.setDistanceMode(VL53L1X::Long);
-  sensor.setMeasurementTimingBudget(33000);
-  sensor.startContinuous(33);
-
 
   Serial.println("Setup complete.");
 }
@@ -199,16 +208,22 @@ int lastDistInches = 0;
 void loop() {
   //create some variables to store the color data in
   uint16_t r, g, b, c;
+  
+  for (int i = 0; i<NUM_LIDAR; i++) {
+    enableMuxPort(i);
+    if(sensor[i].dataReady()){
+      int distMM = sensor[i].read(false);  // Read but don't block.
+      int distInches = (int)(((double)distMM) / 25.4);
 
-  if (sensor.dataReady()) {
-    int distMM = sensor.read(false);
-    int distInches = (int)(((double)distMM) / 25.4);
-
-    if (distInches != lastDistInches) {
-      lastDistInches = distInches;
-      sendDistance(0, lastDistInches);
-      Serial.print(distInches); Serial.println(" inches");
+      Serial.print("Sensor "); Serial.print(i); Serial.print(" = "); Serial.print(distMM); Serial.println("mm");
+  
+      if (distInches != lastDistInches) {
+        lastDistInches = distInches;
+        sendDistance(i, lastDistInches);
+        Serial.print("Sensor ");Serial.print(i);Serial.print(" is:");Serial.print(distInches); Serial.println(" inches");
+      }
     }
+    disableMuxPort(i);
   }
   
   //wait for color data to be ready
@@ -245,6 +260,7 @@ void loop() {
   int normBlue  = (100 * b) / (r + g + b);
 
   // print raw color values;
+  /*
   Serial.print("red: ");
   Serial.print(normRed);
   
@@ -256,12 +272,12 @@ void loop() {
 
   Serial.print(" sample rate: ");
   Serial.print(readsAverage);
-
+*/
   int distance = 0;
   ColorSample *target = findClosestColor(targetColors, normRed, normGreen, normBlue, distance);
   if (distance < 5) {
     if (++goodCount > 3) {
-      Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
+      //Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
       outputValues(target->out1, target->out2, 1);
     } else {
       outputValues(0, 0, 0);
@@ -274,11 +290,11 @@ void loop() {
     boardPixel.setPixelColor(0, 0, 0, 0);
     boardPixel.show();
   }
-  Serial.println();
+  //Serial.println();
 
   checkForCalibration(normRed, normGreen, normBlue);
   
-  delay(1);
+  delay(10);
 }
 
 bool checkForOnRobot() {
