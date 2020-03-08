@@ -141,13 +141,13 @@ void setup() {
 
   //enable color sensign mode
   apds.enableColor(true);
-
+  apds.setADCGain(APDS9960_AGAIN_16X );
   //enable proximity mode
   apds.enableProximity(true);
 
   //set the interrupt threshold to fire when proximity reading goes above 10
   apds.setProximityInterruptThreshold(0, 5);
-  apds.setADCIntegrationTime(2);
+  apds.setADCIntegrationTime(4);
 
   //enable the proximity interrupt
   apds.enableProximityInterrupt();
@@ -167,7 +167,7 @@ void setup() {
   readCalibratedValues(targetColors);
   displayTargets();
   
-  setRingColor(70, 60, 50);
+  setRingColor(230, 220, 100);
 
   setMuxPort(0);
   for (byte i=0; i< NUM_LIDAR; i++){
@@ -251,7 +251,7 @@ void loop() {
     Serial.print(" ");
     Serial.println(r + g + b);
     delay(1);
-    return;
+    //return;
   }
   
   // Normalize the values:
@@ -260,24 +260,33 @@ void loop() {
   int normBlue  = (100 * b) / (r + g + b);
 
   // print raw color values;
-  /*
+  
   Serial.print("red: ");
   Serial.print(normRed);
   
-  Serial.print(" green: ");
+  Serial.print(" (");
+  Serial.print(r);
+  
+  Serial.print(") green: ");
   Serial.print(normGreen);
   
-  Serial.print(" blue: ");
-  Serial.print(normBlue);
+  Serial.print(" (");
+  Serial.print(g);
 
-  Serial.print(" sample rate: ");
+  Serial.print(") blue: ");
+  Serial.print(normBlue);
+  
+  Serial.print(" (");
+  Serial.print(b);
+
+  Serial.print(") sample rate: ");
   Serial.print(readsAverage);
-*/
+
   int distance = 0;
   ColorSample *target = findClosestColor(targetColors, normRed, normGreen, normBlue, distance);
   if (distance < 5) {
     if (++goodCount > 3) {
-      //Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
+      Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
       outputValues(target->out1, target->out2, 1);
     } else {
       outputValues(0, 0, 0);
@@ -290,7 +299,7 @@ void loop() {
     boardPixel.setPixelColor(0, 0, 0, 0);
     boardPixel.show();
   }
-  //Serial.println();
+  Serial.println();
 
   checkForCalibration(normRed, normGreen, normBlue);
   
