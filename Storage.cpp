@@ -3,13 +3,14 @@
 #if defined(__AVR_ATmega168__) ||defined(__AVR_ATmega168P__) ||defined(__AVR_ATmega328P__) ||defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
 
 #include <EEPROM.h>
+#define EEPROM_SIGNATURE 9962
 
 void initStorage() {
   
 }
 
 void saveCalibratedColors(ColorSample targetColors[]) {
-  int eepromSig = 9960;
+  int eepromSig = EEPROM_SIGNATURE;
     EEPROM.put(0, eepromSig);
     for (int i = 0; i < 4; i++) {
       ColorSample cs = targetColors[i];
@@ -20,7 +21,7 @@ void saveCalibratedColors(ColorSample targetColors[]) {
 void readCalibratedValues(ColorSample targetColors[]) {
   int eepromSig = 0;
   EEPROM.get(0, eepromSig);
-  if ( eepromSig == 9960 ) {
+  if ( eepromSig == EEPROM_SIGNATURE ) {
     for (int i = 0; i < 4; i++) {
       ColorSample cs;
       EEPROM.get(sizeof(int) + i * sizeof(ColorSample), cs);

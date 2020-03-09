@@ -15,8 +15,6 @@
 
  ***************************************************************************/
 
-//the pin that the interrupt is attached to
-#define INT_PIN 13
 
 // Add neopixel support so we can illuminate the target.
 #include <Wire.h>
@@ -30,7 +28,7 @@
 #define PIN_RESET 9  
 #define DC_JUMPER 1 
 
-#define ONBOARD_NEO_PIN  6
+#define ONBOARD_NEO_PIN  13
 
 #define PIN_OUT1          8
 #define PIN_OUT2          9
@@ -55,10 +53,10 @@ long goodCount = 0;
 
 bool isOnRobot = true;
 ColorSample targetColors[] = {
-  {"Red", 63, 12, 24, 0, 0, 100, 0, 0},
-  {"Green", 15, 44, 42, 0, 1, 0, 100, 0},
-  {"Blue", 8, 32, 58, 1, 0, 0, 0, 100},
-  {"Yellow", 36, 38, 25, 1, 1, 50, 50, 0}
+  {"Red",    45, 22, 31, 0, 0, 100, 0,   0},
+  {"Green",  25, 37, 37, 0, 1, 0,   100, 0},
+  {"Blue",   18, 34, 46, 1, 0, 0,   0,   100},
+  {"Yellow", 39, 31, 28, 1, 1, 50,  50,  0}
   };
 
 void outputValues(int bit1, int bit2, int valid) {
@@ -120,7 +118,6 @@ void setup() {
 
   isOnRobot = checkForOnRobot();
 
-  pinMode(INT_PIN, INPUT_PULLUP);
   pinMode(PIN_OUT1, OUTPUT);
   pinMode(PIN_OUT2, OUTPUT);
   pinMode(PIN_VALID, OUTPUT);
@@ -155,6 +152,8 @@ void setup() {
   boardPixel.begin();
   boardPixel.setBrightness(50);
   boardPixel.clear();
+  boardPixel.setPixelColor(0, 255, 0, 255);
+  boardPixel.show();
 
   oled.begin();      // Initialize the OLED
   oled.clear(ALL);   // Clear the display's internal memory
@@ -236,6 +235,7 @@ void loop() {
     readsAverage = count;
     count = 0;
     timerStart = currentTime;
+    setRingColor(230, 220, 100);
   }
   
   //get the data and print the different channels
@@ -248,6 +248,12 @@ void loop() {
     outputValues(0, 0, 0);
     Serial.print("Too dark.\t");
     Serial.print(c);
+    Serial.print(" ");
+    Serial.print(r);
+    Serial.print(" ");
+    Serial.print(g);
+    Serial.print(" ");
+    Serial.print(b);
     Serial.print(" ");
     Serial.println(r + g + b);
     delay(1);
@@ -284,7 +290,7 @@ void loop() {
 
   int distance = 0;
   ColorSample *target = findClosestColor(targetColors, normRed, normGreen, normBlue, distance);
-  if (distance < 5) {
+  if (distance < 15) {
     if (++goodCount > 3) {
       Serial.print("\t");Serial.print(target->name);Serial.print("  -->  "); Serial.print(distance);
       outputValues(target->out1, target->out2, 1);
