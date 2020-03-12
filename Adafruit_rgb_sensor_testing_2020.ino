@@ -21,9 +21,9 @@
 #include <VL53L1X.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_APDS9960.h>
+#include <SFE_MicroOLED.h> 
 #include "ColorSample.h"
 #include "Storage.h"
-#include <SFE_MicroOLED.h>  // Include the SFE_MicroOLED library
 
 #define OLED_PIN_RESET 9
 #define OLEED_DC_JUMPER 1
@@ -33,12 +33,13 @@
 #define PIN_OUT1          8
 #define PIN_OUT2          9
 #define PIN_VALID        10
+#define PIN_ACTIVATE     11
 
 #define RED_CALIBRATE_PIN 2
 #define GREEN_CALIBRATE_PIN 3
 #define BLUE_CALIBRATE_PIN 4
 #define YELLOW_CALIBRATE_PIN 5
-#define NUM_LIDAR 4
+#define NUM_LIDAR 1
 
 Adafruit_APDS9960 apds;
 Adafruit_NeoPixel boardPixel(1, ONBOARD_NEO_PIN, NEO_GRB + NEO_KHZ800);
@@ -112,6 +113,13 @@ void displayTargets() {
   oled.display();       // Refresh the display
 }
 
+void setupColorSensor() {
+  //enable color sensign mode
+  apds.enableColor(true);
+  apds.setADCGain(APDS9960_AGAIN_16X);
+  apds.setADCIntegrationTime(4);
+}
+
 void setup() {
   while (!Serial); // Wait for Serial port to initialize.
   Serial.begin(115200);
@@ -126,6 +134,7 @@ void setup() {
   pinMode(GREEN_CALIBRATE_PIN, INPUT_PULLUP);
   pinMode(BLUE_CALIBRATE_PIN, INPUT_PULLUP);
   pinMode(YELLOW_CALIBRATE_PIN, INPUT_PULLUP);
+  pinMode(PIN_ACTIVATE, INPUT_PULLUP);
 
   Wire.setClock(400000);
   //delay(1000);
@@ -137,10 +146,7 @@ void setup() {
     Serial.println("Device initialized!");
   }
 
-  //enable color sensign mode
-  apds.enableColor(true);
-  apds.setADCGain(APDS9960_AGAIN_16X);
-  apds.setADCIntegrationTime(4);
+  setupColorSensor();
 
   boardPixel.begin();
   boardPixel.setBrightness(50);
@@ -224,7 +230,13 @@ void loop() {
       readsAverage = count;
       count = 0;
       timerStart = currentTime;
-      setRingColor(230, 220, 100);
+      if (!digitalRead(PIN_ACTIVATE)) {
+        // Turn off NeoPixel ring if we don't need it.
+        setRingColor(0, 0, 0);
+      } else {
+        setRingColor(230, 220, 100);
+      }
+      setupColorSensor();
     }
 
     //get the data and print the different channels
@@ -232,7 +244,7 @@ void loop() {
     count++;
 
     // Check to make sure we're seeing enough light coming in.
-    if (c < 20) {
+    if (c < 15) {
       // Too dark, tell the rio and bail out.
       outputValues(0, 0, 0);
       debug("Too dark.\t c: %i r: %i g: %i b: %i sum: %i\n", c, r, g, b, r + g + b);
